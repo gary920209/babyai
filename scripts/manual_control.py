@@ -4,16 +4,22 @@ import time
 import argparse
 import numpy as np
 import gym
-import gym_minigrid
-from gym_minigrid.wrappers import *
-from gym_minigrid.window import Window
-import babyai
+from minigrid.wrappers import *
+import matplotlib.pyplot as plt
 
-def redraw(img):
+step_counter = 0
+
+
+def redraw(img, step_count):
     if not args.agent_view:
-        img = env.render('rgb_array', tile_size=args.tile_size)
+        img = env.render()
 
-    window.show_img(img)
+    # Save the image with a unique filename based on the step count
+    filename = f"frame_step_{step_count}.png"
+    plt.imshow(img)
+    plt.axis('off')
+    plt.savefig(filename, bbox_inches='tight', pad_inches=0)
+    print(f"Image saved as {filename}")
 
 def reset():
     if args.seed != -1:
@@ -23,55 +29,40 @@ def reset():
 
     if hasattr(env, 'mission'):
         print('Mission: %s' % env.mission)
-        window.set_caption(env.mission)
 
-    redraw(obs)
+    redraw(obs, step_count=0)
 
-def step(action):
-    obs, reward, done, info = env.step(action)
-    print('step=%s, reward=%.2f' % (env.step_count, reward))
+def step(action, step_count):
+    global step_counter
+    step_counter += 1  # Increment the step count
+    result = env.step(action)
+    if len(result) == 5:
+        obs, reward, done, truncated, info = result
+        done = done or truncated  # Combine 'done' and 'truncated' flags
+    elif len(result) == 4:
+        obs, reward, done, info = result
+    else:
+        raise ValueError(f"Unexpected number of return values from env.step: {len(result)}")
+
+
+    # obs, reward, done, info = env.step(action)
+    print(f"Step {step_count}: Action={action}, Reward={reward}, Done={done}, Info={info}")
+
+    redraw(obs, step_count)
 
     if done:
         print('done!')
         reset()
-    else:
-        redraw(obs)
 
-def key_handler(event):
-    print('pressed', event.key)
-
-    if event.key == 'escape':
-        window.close()
-        return
-
-    if event.key == 'backspace':
-        reset()
-        return
-
-    if event.key == 'left':
-        step(env.actions.left)
-        return
-    if event.key == 'right':
-        step(env.actions.right)
-        return
-    if event.key == 'up':
-        step(env.actions.forward)
-        return
-
-    # Spacebar
-    if event.key == ' ':
-        step(env.actions.toggle)
-        return
-    if event.key == 'pageup' or event.key == 'p':
-        step(env.actions.pickup)
-        return
-    if event.key == 'pagedown' or event.key == 'd':
-        step(env.actions.drop)
-        return
-
-    if event.key == 'enter':
-        step(env.actions.done)
-        return
+def process_actions(action_sequence):
+    """
+    Process a sequence of actions and generate images for each step.
+    :param action_sequence: List of actions to execute in the environment.
+    """
+    reset()
+    for step_count, action in enumerate(action_sequence, start=1):
+        print(f"Executing action: {action}")
+        step(action, step_count)
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -100,16 +91,16 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-env = gym.make(args.env)
+env = gym.make(args.env, render_mode='rgb_array')
 
 if args.agent_view:
     env = RGBImgPartialObsWrapper(env)
     env = ImgObsWrapper(env)
-
-window = Window('gym_minigrid - ' + args.env)
-window.reg_key_handler(key_handler)
-
-reset()
-
-# Blocking event loop
-window.show(block=True)
+example_actions = [
+    env.unwrapped.actions.forward,  # Move forward
+    env.unwrapped.actions.left,     # Turn left
+    env.unwrapped.actions.forward,  # Move forward
+    env.unwrapped.actions.done      # Mark task as done
+]
+# Process the example action sequence
+process_actions(example_actions)
